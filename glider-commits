@@ -2,12 +2,12 @@
 #
 # by William Hofferbert
 #
-
+#
 # this is a visual representation of the commits that
 # will be set up to happen
 # 
 # It just sucks cause you have to not do much with git
-# for 4-5 weeks.
+# for 4-5 weeks... or be careful about commiting things
 #
 # S x x x x x 
 # M x x x x x 
@@ -36,6 +36,13 @@ fold -s -w $(tput cols) << EOF
 
   To circumvent this behavior, specify the complete path to git ($(which git))
 
+  NOTE that if you use git from many computers, you run the risk of bypassing
+  the ~/.bashrc change. 
+
+  You will also have to re-source your ~/.bashrc or log out and back in to 
+  have the changes take affect.
+
+
 Usage
 
   $name_bold [options] ${bold}[--engage|--disengage]${reg}
@@ -48,7 +55,7 @@ Options:
 
   --disengage | -D
     Disengage the mechanism. Puts your ~/.bashrc back to the way it was
-    It should probably remove the any remaining at jobs too, but it doesn't
+    and remove any reamining glider jobs from the atq
 
   --offset-hours | -O   [INTEGER]
     Specify an integer number of hours to offset the commits by
@@ -62,8 +69,30 @@ Options:
     Specify the number of seconds to wait between repeated commits
     Default is $commit_timing_secs
 
+  --project-dir [/path/to/git/project]
+    Specify the project to update
+    Default is $project_dir
+
+  --update-file [filename]
+    Specify the file to overwrite with random data
+    Default is $dummy_file
+
+  --rcfile [/path/to/rcfile]
+    Specify an rcfile to adust instead of $rcfile
+    Must support bash-style functions and alias
+
   --help | -h
     Display this help text.
+
+
+Examples
+
+  $0 --engage
+  # Turn the mechanism on
+
+  $0 --disengage
+  # Turn the mechanism off
+
 
 EOF
 exit 0
@@ -71,7 +100,7 @@ exit 0
 
 
 handle_args () {
-  OPTS=$(getopt -o hqs --long "help,quiet,silent"  -- "$@")
+  OPTS=$(getopt -o hqsEDO:r:d: --long "help,quiet,silent,engage,disengage,offset-hours:,repitition:,delay-secs:,rcfile:,project-dir:,update-file:"  -- "$@")
   eval set -- "$OPTS"
   while true
     do
@@ -84,6 +113,10 @@ handle_args () {
         -O|--offset-hours) offset_hours=$2; shift 2;;
         -r|--repitition) num_commits=$2; shift 2;;
         -d|--delay-secs) commit_timing_secs=$2; shift 2;;
+        --rcfile) rcfile="$2"; shift 2;;
+        --project-dir) project_dir="$2"; shift 2;;
+        --update-file) dummy_file="$2"; shift 2;;
+        --git-push-string) git_push="$2" ; shift 2;;
         #-v|--value) value=$2; shift 2;;
         
         --) shift; break;;
@@ -110,8 +143,7 @@ cleanup () {
 
 
 sanity () {
-  # checks here
-  echo -en ''
+  [ "$engage" = "f" -a "$disengage" = "f" ] && err "Must be ran to engage or disenage! (see $0 --help for more information)"
 }
 
 
@@ -124,6 +156,8 @@ set_env () {
   reg=$(tput sgr0)
   name_bold="${bold}${script_name}${reg}"
 
+  rcfile=~/.bashrc
+
   # env_defaults here
   q=
 
@@ -132,21 +166,28 @@ set_env () {
   day_secs=$((60 * 60 * 24))
   commit_times=("$date_s" "$(($date_s + ($day_secs * 5) ))" "$(($date_s + ($day_secs * 7)))" "$(($date_s + ($day_secs * 13)))" "$(($date_s + ($day_secs * 14)))" )
 
-  num_commits=6
+  num_commits=42
   commit_timing_secs=60
 
   engage=f
   disengage=f
 
-  project_dir=/home/whofferbert/git/bash/hacker-glider-commit
+  project_dir=/home/$(whoami)/git/bash/hacker-glider-commit
+
+  requires="at date"
+
+  dummy_file=dummy_file
+
+  commit_message="glider commits"
+  git_push="push -u $(whoami) master"
 }
 
 setup_jobfile () {
 cat << EOF
 cd $project_dir
-head -1 /dev/urandom > $project_dir/dummy_file
-$(which git) commit -m "glider commits" dummy_file
-$(which git) push -u whofferbert master
+head -1 /dev/urandom > $project_dir/$dummy_file
+$(which git) commit -m "$commit_message" $dummy_file
+$(which git) $git_push
 EOF
 }
 
@@ -159,10 +200,14 @@ turn_on_jobs () {
       for rep in $(seq 1 1 $num_commits)
         do
           at_time=$(date --date=@$(($secs + $offset)) "+%y%m%d%H%M")
-          at -f $jobfile -t $at_time
+          at -q g -f $jobfile -t $at_time 2>/dev/null
           offset=$(($offset + $commit_timing_secs))
         done
     done
+  echo "$self -D" > $jobfile
+  endtime=$(($date_s + ($day_secs * 23)))
+  at -q g -f $jobfile -t $(date --date=@$endtime) "+%y%m%d%H%M" 2>/dev/null
+  rm $jobfile
 }
 
 glider_rc () {
@@ -191,14 +236,21 @@ EOF
 }
 
 adjust_bashrc () {
-  cp ~/.bashrc ~/.bashrc.bak
-  glider_rc >> ~/.bashrc
+  cp $rcfile $rcfile.bak
+  glider_rc >> $rcfile
 }
 
 reset_bashrc () {
   # this should be better
-  cp ~/.bashrc ~/.bashrc.glider.bak
-  cp ~/.bashrc.bak ~/.bashrc
+  cp $rcfile $rcfile.glider.bak
+  cp $rcfile.bak $rcfile
+}
+
+reset_atq () {
+  atq | awk '{if ($7 ~ /g/) print $1}' | while read jobid
+    do
+      atrm $jobid
+    done
 }
 
 engage () {
@@ -207,6 +259,7 @@ engage () {
 }
 
 disengage () {
+  reset_atq
   reset_bashrc
 }
 
