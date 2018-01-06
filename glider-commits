@@ -1,0 +1,223 @@
+#!/bin/bash
+#
+# by William Hofferbert
+#
+
+# this is a visual representation of the commits that
+# will be set up to happen
+# 
+# It just sucks cause you have to not do much with git
+# for 4-5 weeks.
+#
+# S x x x x x 
+# M x x x x x 
+# T x x 0 x x 
+# W x x x 0 x 
+# T x 0 0 0 x 
+# F x x x x x
+# S T x x x x 
+#
+
+#
+# Functions
+#
+
+helps () {
+fold -s -w $(tput cols) << EOF
+
+  Draw a glider on your git activity chart.
+
+  This script schedules git commits to be executed with the 'at' daemon
+  at specific times to draw a glider on the activity chart.
+
+  To prevent accidental commits wrecking the image, an alias is temporarily 
+  added to your ~/.bashrc to provide a warning message instead of calling 
+  the actual 'git'.
+
+  To circumvent this behavior, specify the complete path to git ($(which git))
+
+Usage
+
+  $name_bold [options] ${bold}[--engage|--disengage]${reg}
+
+Options:
+
+  --engage | -E
+    Engage the mechanism. This disables your 'git' shortcut and
+    plots to commit changes at specific times to draw the glider
+
+  --disengage | -D
+    Disengage the mechanism. Puts your ~/.bashrc back to the way it was
+    It should probably remove the any remaining at jobs too, but it doesn't
+
+  --offset-hours | -O   [INTEGER]
+    Specify an integer number of hours to offset the commits by
+    Default is $offset_hours
+
+  --repitition | -r   [INTEGER]
+    Specify the minimum number of commits to make each day
+    Default is $num_commits
+
+  --delay-secs | -d   [INTEGER]
+    Specify the number of seconds to wait between repeated commits
+    Default is $commit_timing_secs
+
+  --help | -h
+    Display this help text.
+
+EOF
+exit 0
+}
+
+
+handle_args () {
+  OPTS=$(getopt -o hqs --long "help,quiet,silent"  -- "$@")
+  eval set -- "$OPTS"
+  while true
+    do
+      case "$1" in
+        -h|--help) helps; shift;;
+        -q|--quiet) q=">/dev/null"; shift;;
+        -s|--silent) q=">/dev/null 2>/dev/null"; shift;;
+        -E|--engage) engage="t"; shift;;
+        -D|--disengage) disengage="t"; shift;;
+        -O|--offset-hours) offset_hours=$2; shift 2;;
+        -r|--repitition) num_commits=$2; shift 2;;
+        -d|--delay-secs) commit_timing_secs=$2; shift 2;;
+        #-v|--value) value=$2; shift 2;;
+        
+        --) shift; break;;
+      esac
+  done
+}
+
+
+err () {
+  echo "$1" >&2
+  exit 2
+}
+
+
+warn () {
+  echo "$1" >&2
+}
+
+
+cleanup () {
+  warn "Signal received ..."
+  exit 1
+}
+
+
+sanity () {
+  # checks here
+  echo -en ''
+}
+
+
+set_env () {
+  script_path=$( cd "$(dirname "$0")" ; pwd -P )
+  script_name=$(basename $0)
+  self=$script_path/$script_name
+
+  bold=$(tput bold)
+  reg=$(tput sgr0)
+  name_bold="${bold}${script_name}${reg}"
+
+  # env_defaults here
+  q=
+
+  offset_hours=6
+  date_s=$(( $(date --date="next thursday" +%s) + (60 * 60 * $offset_hours) ))
+  day_secs=$((60 * 60 * 24))
+  commit_times=("$date_s" "$(($date_s + ($day_secs * 5) ))" "$(($date_s + ($day_secs * 7)))" "$(($date_s + ($day_secs * 13)))" "$(($date_s + ($day_secs * 14)))" )
+
+  num_commits=6
+  commit_timing_secs=60
+
+  engage=f
+  disengage=f
+
+  project_dir=/home/whofferbert/git/bash/hacker-glider-commit
+}
+
+setup_jobfile () {
+cat << EOF
+cd $project_dir
+head -1 /dev/urandom > $project_dir/dummy_file
+git commit -m "glider commits" dummy_file
+git push 
+$(which git) 
+EOF
+}
+
+turn_on_jobs () {
+  jobfile=/tmp/.glider.$RANDOM
+  setup_jobfile > $jobfile
+  for secs in "${commit_times[@]}"
+    do
+      offset=0
+      for rep in $(seq 1 1 $num_commits)
+        do
+          at_time=$(date --date=@$(($secs + $offset)) "+%y%m%d%H%M")
+          
+          offset=$(($offset + $commit_timing_secs))
+        done
+    done
+}
+
+glider_rc () {
+cat << EOF
+# BEGIN GLIDER MODS
+# DO NOT ADJUST THESE COMMENTS
+
+git_warn () {
+cat << EOWARN
+
+But... But... Think of the Glider!
+
+You can still use git by specifying the complete
+path.... \$(which git)
+
+EOWARN
+}
+
+# create an alias for 'git'
+alias git=git_warn
+
+
+# DO NOT ADJUST THESE COMMENTS
+# END GLIDER MODS
+EOF
+}
+
+adjust_bashrc () {
+  cp ~/.bashrc ~/.bashrc.bak
+  glider_rc >> ~/.bashrc
+}
+
+reset_bashrc () {
+  cp ~/.bashrc ~/.bashrc.glider.bak
+  cp ~/.bashrc.bak ~/.bashrc
+}
+
+engage () {
+  turn_on_jobs
+  adjust_bashrc
+}
+
+disengage () {
+  reset_bashrc
+}
+
+main () {
+  set_env
+  handle_args $@
+  sanity
+  trap cleanup 1 2 3 6 9 15 17 19 23
+  [ "$engage" = "t" ] && engage
+  [ "$disengage" = "t" ] && disengage
+  # stuff
+}
+
+eval main $@ $q
