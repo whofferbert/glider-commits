@@ -145,7 +145,7 @@ setup_jobfile () {
 cat << EOF
 cd $project_dir
 head -1 /dev/urandom > $project_dir/dummy_file
-$(which gi)t commit -m "glider commits" dummy_file
+$(which git) commit -m "glider commits" dummy_file
 $(which git) push -u whofferbert master
 EOF
 }
