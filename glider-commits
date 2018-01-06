@@ -81,6 +81,10 @@ Options:
     Specify an rcfile to adust instead of $rcfile
     Must support bash-style functions and alias
 
+  --git-push-string 'push string'
+    Specify the push string to use for the git push
+    Default is $git_push
+
   --help | -h
     Display this help text.
 
@@ -117,8 +121,6 @@ handle_args () {
         --project-dir) project_dir="$2"; shift 2;;
         --update-file) dummy_file="$2"; shift 2;;
         --git-push-string) git_push="$2" ; shift 2;;
-        #-v|--value) value=$2; shift 2;;
-        
         --) shift; break;;
       esac
   done
@@ -200,13 +202,13 @@ turn_on_jobs () {
       for rep in $(seq 1 1 $num_commits)
         do
           at_time=$(date --date=@$(($secs + $offset)) "+%y%m%d%H%M")
-          at -q g -f $jobfile -t $at_time 2>/dev/null
+          at -M -q g -f $jobfile -t $at_time 2>/dev/null
           offset=$(($offset + $commit_timing_secs))
         done
     done
   echo "$self -D" > $jobfile
   endtime=$(($date_s + ($day_secs * 23)))
-  at -q g -f $jobfile -t $(date --date=@$endtime) "+%y%m%d%H%M" 2>/dev/null
+  at -M -q g -f $jobfile -t $(date --date=@$endtime) "+%y%m%d%H%M" 2>/dev/null
   rm $jobfile
 }
 
