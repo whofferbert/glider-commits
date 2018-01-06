@@ -145,9 +145,8 @@ setup_jobfile () {
 cat << EOF
 cd $project_dir
 head -1 /dev/urandom > $project_dir/dummy_file
-git commit -m "glider commits" dummy_file
-git push 
-$(which git) 
+$(which gi)t commit -m "glider commits" dummy_file
+$(which git) push -u whofferbert master
 EOF
 }
 
@@ -160,7 +159,7 @@ turn_on_jobs () {
       for rep in $(seq 1 1 $num_commits)
         do
           at_time=$(date --date=@$(($secs + $offset)) "+%y%m%d%H%M")
-          
+          at -f $jobfile -t $at_time
           offset=$(($offset + $commit_timing_secs))
         done
     done
@@ -197,6 +196,7 @@ adjust_bashrc () {
 }
 
 reset_bashrc () {
+  # this should be better
   cp ~/.bashrc ~/.bashrc.glider.bak
   cp ~/.bashrc.bak ~/.bashrc
 }
@@ -217,7 +217,6 @@ main () {
   trap cleanup 1 2 3 6 9 15 17 19 23
   [ "$engage" = "t" ] && engage
   [ "$disengage" = "t" ] && disengage
-  # stuff
 }
 
 eval main $@ $q
