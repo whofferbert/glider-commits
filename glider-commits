@@ -244,6 +244,7 @@ adjust_bashrc () {
 
 reset_bashrc () {
   # this should be better
+  [ ! -e $rcfile.bak ] && err "No backup $rcfile found! Was $0 ever engaged?"
   cp $rcfile $rcfile.glider.bak
   cp $rcfile.bak $rcfile
 }
@@ -256,6 +257,7 @@ reset_atq () {
 }
 
 engage () {
+  [ -n "$(grep "END GLIDER MODS" $rcfile)" ] && err "Already engaged!"
   turn_on_jobs
   adjust_bashrc
 }
